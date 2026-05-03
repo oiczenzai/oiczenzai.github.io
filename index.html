@@ -29,15 +29,16 @@
   <div class="card">
     <div id="status">ボタンを押してください</div>
     <input type="text" id="jan" placeholder="JANコード">
+    <input type="text" id="product" placeholder="商品名">
     <input type="text" id="store" placeholder="店舗名" list="storeList">
     <datalist id="storeList"></datalist>
     <input type="number" id="price" placeholder="価格" inputmode="numeric">
-    <div style="margin: 8px 0;">
-      <label><input type="radio" name="taxType" value="inclusive" checked> 税込み</label>
-      <label style="margin-left: 20px;"><input type="radio" name="taxType" value="exclusive"> 税別</label>
+    <div style="margin: 8px 0; display: flex; align-items: center;">
+      <label style="margin-right: 20px;"><input type="radio" name="taxType" value="inclusive" checked> 税込み</label>
+      <label><input type="radio" name="taxType" value="exclusive"> 税別</label>
     </div>
-    <div style="margin: 8px 0;">
-      <label>税率: </label>
+    <div style="margin: 8px 0; display: flex; align-items: center;">
+      <label style="margin-right: 10px;">税率: </label>
       <select id="taxRate">
         <option value="0.08">8%</option>
         <option value="0.10" selected>10%</option>
@@ -72,7 +73,18 @@
       });
     }
 
-    window.onload = loadStores;
+    window.onload = () => {
+      loadStores();
+      document.getElementById('jan').addEventListener('input', () => {
+        const jan = document.getElementById('jan').value;
+        const products = JSON.parse(localStorage.getItem('products') || '{}');
+        if (products[jan]) {
+          document.getElementById('product').value = products[jan];
+        } else {
+          document.getElementById('product').value = '';
+        }
+      });
+    };
 
     startOverlay.onclick = () => {
       startOverlay.style.display = 'none';
@@ -125,7 +137,8 @@
       const data = {
         jan: document.getElementById('jan').value,
         store: document.getElementById('store').value,
-        price: Math.round(price)
+        price: Math.round(price),
+        product: document.getElementById('product').value
       };
 
       if (!data.jan || !data.price) { alert("入力不足"); return; }
@@ -140,6 +153,14 @@
           localStorage.setItem('stores', JSON.stringify(stores));
           loadStores();
         }
+      }
+
+      // 商品名を保存
+      const product = document.getElementById('product').value;
+      if (product && data.jan) {
+        const products = JSON.parse(localStorage.getItem('products') || '{}');
+        products[data.jan] = product;
+        localStorage.setItem('products', JSON.stringify(products));
       }
 
       statusElement.innerText = "送信中...";
