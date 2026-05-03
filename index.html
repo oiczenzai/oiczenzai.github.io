@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v3.2 商品名自動補完版</title>
+  <title>v3.3 商品名自動補完版</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -51,7 +51,7 @@
   </div>
 
   <script>
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxIQGA2kz0chypzLaqHjA1ijl3HEM0y9TEbo2T1UWe1T9crrawMovbb5l1AUk8U-cYG1A/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbwJV-ImRg9Jh-9pFtZ53fM2eI4_HxcjYhzLnqgdJGsrkpnIpN_9Fu6oJa_su0fMy2cV/exec';
 
     const videoElement = document.getElementById('video');
     const statusElement = document.getElementById('status');
@@ -80,34 +80,37 @@
 
     // JAN入力時に商品名を検索
 // JAN入力時に商品名を検索（ローカル → GAS経由でjancode.xyz）
-    async function autoFillProduct() {
+async function autoFillProduct() {
       const jan = janInput.value;
       if (jan.length < 8) return;
 
-      // 1. ローカルストレージを確認
       const products = JSON.parse(localStorage.getItem('products') || '{}');
       if (products[jan]) {
         productInput.value = products[jan];
-        statusElement.innerText = "登録済みの商品です";
+        statusElement.innerText = "登録済み";
         return;
       }
 
-      // 2. GASのdoGet経由でスクレイピング実行
       statusElement.innerText = "商品名を検索中...";
       try {
-        // GAS_URLにクエリパラメータを付けてGET送信
-        const res = await fetch(`${GAS_URL}?jan=${jan}`);
-        const data = await res.json();
+        // fetchのオプションにキャッシュ無効化を追加
+        const res = await fetch(`${GAS_URL}?jan=${jan}`, {
+          method: 'GET'
+        });
+        
+        // テキストとして取得してからパース（CORSエラー対策）
+        const text = await res.text();
+        const data = JSON.parse(text);
 
         if (data.name) {
           productInput.value = data.name;
-          statusElement.innerText = "商品名を取得しました";
+          statusElement.innerText = "取得成功";
         } else {
           statusElement.innerText = "見つかりませんでした";
         }
       } catch (e) {
         console.error("Lookup Error:", e);
-        statusElement.innerText = "検索エラー";
+        statusElement.innerText = "検索エラー（GAS設定を確認してください）";
       }
     }
 
