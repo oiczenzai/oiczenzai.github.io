@@ -54,13 +54,18 @@
         videoEl.srcObject = stream;
         statusEl.innerText = "バーコードを枠内に近づけてください";
 
-        codeReader.decodeFromVideoElement(videoEl, (result, err) => {
-          if (result) {
+        codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+        if (result) {
+            // 成功
             document.getElementById('jan').value = result.text;
-            statusEl.innerText = "認識成功！";
-            if (navigator.vibrate) navigator.vibrate(150);
-          }
-          // NotFoundException（見つからない）は無視してループを維持
+            statusElement.innerText = "認識成功: " + result.text;
+            if (navigator.vibrate) navigator.vibrate(100);
+        }
+        
+        // 認識中であることを示すために、あえてNotFoundエラー以外をチェック
+        if (err && !(err instanceof ZXing.NotFoundException)) {
+            console.error("解析エラー:", err);
+        }
         }, decodeHints);
         
       } catch (e) {
