@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v3.32 商品名自動補完版</title>
+  <title>v3.33 商品名自動補完版</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -84,7 +84,7 @@ async function autoFillProduct() {
       const jan = janInput.value;
       if (jan.length < 8) return;
 
-      // 1. ローカルストレージを確認
+      // 1. ローカルストレージを最優先（最速）
       const products = JSON.parse(localStorage.getItem('products') || '{}');
       if (products[jan]) {
         productInput.value = products[jan];
@@ -94,27 +94,37 @@ async function autoFillProduct() {
 
       statusElement.innerText = "商品名を検索中...";
       try {
-        // GASを通さず、CORSプロキシ経由でjancode.xyzを取得
+        // GAS を通さず、比較的ブロックされにくいプロキシを使用
         const targetUrl = `https://www.jancode.xyz/index.php?c=jancode&m=search&jan=${jan}`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?url=${encodeURIComponent(targetUrl)}`;
         
         const res = await fetch(proxyUrl);
-        const data = await res.json();
-        const html = data.contents; // 取得したHTML本体
+        if (!res.ok) throw new Error('Proxy error');
+        
+        const html = await res.text();
 
-        // <title>タグから商品名を抽出
-        const match = html.match(/<title>JANコード\s\d+\s:\s(.*?)\s-\sJAN検索\.xyz<\/title>/i);
-        const productName = match ? match[1].trim() : "";
-
-        if (productName) {
+        // <title>タグから商品名を抽出（スペースの変動に強く修正）
+        // 例: <title>JANコード 49... : 商品名 - JAN検索.xyz</title>
+        const match = html.match(/<title>JANコード\s+\d+\s+:\s+(.*?)\s+-\s+JAN検索\.xyz<\/title>/i);
+        
+        if (match && match[1]) {
+          const productName = match[1].trim();
           productInput.value = productName;
           statusElement.innerText = "取得成功";
         } else {
-          statusElement.innerText = "見つかりませんでした";
+          // ヒットしなかった場合、代替手段として Open Food Facts (CORS対応済み) を試す
+          const offRes = await fetch(`https://world.openfoodfacts.org/api/v2/product/${jan}.json?fields=product_name_ja`);
+          const offData = await offRes.json();
+          if (offData.status === 1 && offData.product.product_name_ja) {
+            productInput.value = offData.product.product_name_ja;
+            statusElement.innerText = "取得成功(OFF)";
+          } else {
+            statusElement.innerText = "見つかりませんでした";
+          }
         }
       } catch (e) {
         console.error("Lookup Error:", e);
-        statusElement.innerText = "検索エラー";
+        statusElement.innerText = "検索エラー（制限中）";
       }
     }
 
