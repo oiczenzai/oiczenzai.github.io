@@ -2,29 +2,32 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>価格管理システム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>v2.8 価格DB登録</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
-    body { font-family: sans-serif; padding: 15px; max-width: 600px; margin: auto; background: #f4f4f9; }
-    .video-container { position: relative; width: 100%; background: #000; border-radius: 12px; overflow: hidden; line-height: 0; margin-bottom: 10px; }
-    video { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
-    .overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); pointer-events: none; }
-    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
-    button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
-    #status { padding: 10px; text-align: center; color: #555; font-weight: bold; }
+    body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
+    .video-area { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
+    .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -30px; position: relative; }
+    button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
+    #submitBtn { background: #28a745; } /* 保存ボタンは緑に */
+    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+    #status { text-align: center; font-size: 14px; margin-bottom: 10px; color: #555; height: 1.2em; font-weight: bold; }
+    #startOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 10; cursor: pointer; border-radius: 12px; }
   </style>
 </head>
 <body>
 
-  <div class="video-container">
+  <div class="video-area">
+    <div id="startOverlay">タップしてカメラを起動</div>
     <video id="video" playsinline muted></video>
-    <div class="overlay"></div>
+    <div class="guide-box"></div>
   </div>
 
   <div class="card">
-    <div id="status">バーコードをスキャンしてください</div>
+    <div id="status">ボタンを押してください</div>
     <input type="text" id="jan" placeholder="JANコード">
     <input type="text" id="store" placeholder="店舗名" value="マイストア">
     <input type="number" id="price" placeholder="税込価格" inputmode="numeric">
@@ -32,80 +35,89 @@
   </div>
 
   <script>
-    // --- 【重要】ここにGASの /exec URLを貼り付け ---
-    const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; 
+// --- 設定 ---
+const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // 必ず /exec URLに書き換えてください
 
-    const videoElement = document.getElementById('video');
-    const statusElement = document.getElementById('status');
-    const codeReader = new ZXing.BrowserMultiFormatReader();
+const videoElement = document.getElementById('video');
+const statusElement = document.getElementById('status');
+const startOverlay = document.getElementById('startOverlay');
+const codeReader = new ZXing.BrowserMultiFormatReader(); // BarcodeReaderよりMultiFormatの方がヒントが効きやすい
 
-    const decodeHints = new Map();
-    decodeHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
+const hints = new Map();
+hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
 
-    // カメラ起動
-    async function startCamera() {
-      try {
-        const constraints = { video: { facingMode: "environment", width: { ideal: 1280 } } };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        videoElement.srcObject = stream;
+startOverlay.onclick = () => {
+  startOverlay.style.display = 'none';
+  initCamera();
+};
+
+async function initCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    
+    videoElement.srcObject = stream;
+    statusElement.innerText = "スキャン中...";
+
+    // 認識処理
+    codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+      if (result) {
+        document.getElementById('jan').value = result.text;
+        statusElement.innerText = "認識成功！カメラを停止しました";
+        if (navigator.vibrate) navigator.vibrate(100);
         
-        codeReader.decodeFromVideoElement(videoElement, (result, err) => {
-          if (result) {
-            document.getElementById('jan').value = result.text;
-            statusElement.innerText = "読み取り成功！カメラを停止しました";
-            stopCamera(); // 読み取り後にカメラ停止
-            if (navigator.vibrate) navigator.vibrate(150);
-          }
-        }, decodeHints);
-      } catch (e) {
-        statusElement.innerText = "エラー: " + e.message;
+        // --- カメラ停止処理 ---
+        stopCamera();
       }
-    }
+    }, hints);
 
-    // カメラ完全停止処理
-    function stopCamera() {
-      codeReader.reset(); // 解析停止
-      if (videoElement.srcObject) {
-        videoElement.srcObject.getTracks().forEach(track => track.stop());
-        videoElement.srcObject = null;
-      }
-    }
+  } catch (e) {
+    statusElement.innerText = "カメラ起動エラー: " + e.message;
+    startOverlay.style.display = 'flex';
+  }
+}
 
-    // 保存処理
-    document.getElementById('submitBtn').onclick = async () => {
-      const data = {
-        jan: document.getElementById('jan').value,
-        store: document.getElementById('store').value,
-        price: document.getElementById('price').value
-      };
+function stopCamera() {
+  codeReader.reset(); // 解析の停止
+  if (videoElement.srcObject) {
+    videoElement.srcObject.getTracks().forEach(track => track.stop());
+    videoElement.srcObject = null;
+  }
+}
 
-      if (!data.jan || !data.price) {
-        alert("入力が不足しています");
-        return;
-      }
+// --- 保存処理 ---
+document.getElementById('submitBtn').onclick = async () => {
+  const data = {
+    jan: document.getElementById('jan').value,
+    store: document.getElementById('store').value,
+    price: document.getElementById('price').value
+  };
 
-      statusElement.innerText = "GASへ送信中...";
-      
-      try {
-        // no-corsモードはレスポンスを受け取れないが、送信はされる
-        await fetch(GAS_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        
-        statusElement.innerText = "送信完了（シートを確認してください）";
-        alert("送信しました");
-        // 送信後にリロードしてリセット（必要なら）
-        // location.reload(); 
-      } catch (e) {
-        statusElement.innerText = "通信エラー: " + e.message;
-        alert("エラー: " + e.message);
-      }
-    };
+  if (!data.jan || !data.price) {
+    alert("JANコードと価格を入力してください");
+    return;
+  }
 
-    window.onload = startCamera;
+  statusElement.innerText = "送信中...";
+  try {
+    // GAS側で「実行数」が増えない場合、このURLが間違っているかデプロイ設定が「全員」になっていません
+    await fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors', // CORS回避
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    
+    alert("送信しました。シートを確認してください。");
+    statusElement.innerText = "保存完了";
+    // 次のスキャンのためにリセット（任意）
+    // location.reload(); 
+  } catch (e) {
+    alert("送信失敗: " + e.message);
+    statusElement.innerText = "エラー: " + e.message;
+  }
+};
   </script>
 </body>
 </html>
