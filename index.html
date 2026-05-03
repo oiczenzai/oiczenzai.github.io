@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>価格DB登録 v2.1</title>
+  <title>価格DB登録 v2.2</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -38,7 +38,7 @@ const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // ここにGASのURLを貼り付け
 // グローバルスコープで定義（どこからでもアクセス可能にする）
 const videoElement = document.getElementById('video');
 const statusElement = document.getElementById('status');
-const codeReader = new ZXing.BrowserMultiFormatReader();
+const codeReader = new ZXing.BrowserBarcodeReader();
 
 // バーコード認識の設定（JANコードに特化）
 const decodeHints = new Map();
@@ -83,13 +83,16 @@ function handleSuccess(stream) {
   statusElement.innerText = "バーコードを枠に合わせてください";
   
   // スキャン開始
-  codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+    codeReader.decodeFromVideoElement(videoElement, (result, err) => {
     if (result) {
-      document.getElementById('jan').value = result.text;
-      statusElement.innerText = "認識成功: " + result.text;
-      if (navigator.vibrate) navigator.vibrate(100);
+        document.getElementById('jan').value = result.text;
+        statusElement.innerText = "認識成功: " + result.text;
+        if (navigator.vibrate) navigator.vibrate(100);
+        // 認識したらスキャンを止める場合は以下を追加
+        // codeReader.reset(); 
     }
-  }, decodeHints);
+    // エラーログを出さないようにすることで、ループを高速化します
+    });
 }
 
 // ページ読み込み時にカメラ起動
