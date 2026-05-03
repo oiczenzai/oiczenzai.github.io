@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v4.0 価格DB登録</title>
+  <title>v4.1 価格DB登録</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -11,8 +11,7 @@
     video { width: 100%; height: 100%; object-fit: cover; }
     .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
     .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -30px; position: relative; }
-    button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
-    button:active { opacity: 0.8; }
+    button { width: 100%; padding: 16px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
     input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
     #status { text-align: center; font-size: 14px; margin-bottom: 10px; color: #555; height: 1.2em; font-weight: bold; }
     #startOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 10; cursor: pointer; border-radius: 12px; }
@@ -35,18 +34,17 @@
   </div>
 
   <script>
-    // --- 設定 ---
-    const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // 必ず /exec のURLに差し替えてください
+    const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // ここを必ず最新の /exec に
 
     const videoElement = document.getElementById('video');
     const statusElement = document.getElementById('status');
     const startOverlay = document.getElementById('startOverlay');
-    const codeReader = new ZXing.BrowserMultiFormatReader(); // BarcodeReaderよりこちらが安定します
+    const codeReader = new ZXing.BrowserMultiFormatReader();
 
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
 
-    let selectedStream = null;
+    let isScanning = false;
 
     startOverlay.onclick = () => {
       startOverlay.style.display = 'none';
@@ -56,40 +54,47 @@
     async function initCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+          video: { facingMode: "environment", width: { ideal: 1280 } }
         });
-        selectedStream = stream;
         videoElement.srcObject = stream;
+        isScanning = true;
+        statusElement.innerText = "スキャン開始...";
 
-        // スキャン開始
-        codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+        // 読み取りループ
+        scanLoop();
+
+      } catch (e) {
+        statusElement.innerText = "カメラ起動エラー: " + e.message;
+      }
+    }
+
+    async function scanLoop() {
+      while (isScanning) {
+        try {
+          const result = await codeReader.decodeOnceFromVideoElement(videoElement);
           if (result) {
             document.getElementById('jan').value = result.text;
-            statusElement.innerText = "認識成功: " + result.text;
+            statusElement.innerText = "成功: " + result.text;
             if (navigator.vibrate) navigator.vibrate(100);
-            
-            // カメラを止める
             stopCamera();
+            break;
           }
-        }, hints);
-
-        statusElement.innerText = "スキャン中...";
-      } catch (e) {
-        statusElement.innerText = "エラー: " + e.message;
-        startOverlay.style.display = 'flex';
+        } catch (err) {
+          // 認識できない間はここに来る（正常）
+        }
+        await new Promise(r => setTimeout(r, 200)); // 0.2秒ごとに試行
       }
     }
 
     function stopCamera() {
+      isScanning = false;
       codeReader.reset();
-      if (selectedStream) {
-        selectedStream.getTracks().forEach(track => track.stop());
-        selectedStream = null;
+      if (videoElement.srcObject) {
+        videoElement.srcObject.getTracks().forEach(track => track.stop());
+        videoElement.srcObject = null;
       }
-      statusElement.innerText = "スキャン完了（カメラ停止中）";
     }
 
-    // 保存処理
     document.getElementById('submitBtn').onclick = async () => {
       const data = {
         jan: document.getElementById('jan').value,
@@ -97,31 +102,21 @@
         price: document.getElementById('price').value
       };
 
-      if (!data.jan || !data.price) {
-        alert("JANコードと価格を入力してください");
-        return;
-      }
-
       statusElement.innerText = "送信中...";
 
       try {
         await fetch(GAS_URL, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         });
-        alert("スプレッドシートへ送信しました");
+        alert("送信完了");
         statusElement.innerText = "保存完了";
-        // 必要に応じて入力をリセット
         document.getElementById('jan').value = "";
         document.getElementById('price').value = "";
-        // 再スキャンのためにリロードするか、開始ボタンを出す処理
         startOverlay.style.display = 'flex';
-        startOverlay.innerText = "タップして次のスキャンを開始";
       } catch (e) {
         alert("エラー: " + e.message);
-        statusElement.innerText = "送信失敗";
       }
     };
   </script>
