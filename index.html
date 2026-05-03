@@ -29,8 +29,20 @@
   <div class="card">
     <div id="status">ボタンを押してください</div>
     <input type="text" id="jan" placeholder="JANコード">
-    <input type="text" id="store" placeholder="店舗名" value="マイストア">
-    <input type="number" id="price" placeholder="税込価格" inputmode="numeric">
+    <input type="text" id="store" placeholder="店舗名" list="storeList">
+    <datalist id="storeList"></datalist>
+    <input type="number" id="price" placeholder="価格" inputmode="numeric">
+    <div style="margin: 8px 0;">
+      <label><input type="radio" name="taxType" value="inclusive" checked> 税込み</label>
+      <label style="margin-left: 20px;"><input type="radio" name="taxType" value="exclusive"> 税別</label>
+    </div>
+    <div style="margin: 8px 0;">
+      <label>税率: </label>
+      <select id="taxRate">
+        <option value="0.08">8%</option>
+        <option value="0.10" selected>10%</option>
+      </select>
+    </div>
     <button id="submitBtn">スプレッドシートへ保存</button>
   </div>
 
@@ -48,6 +60,19 @@
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
 
     let currentStream = null;
+
+    function loadStores() {
+      const stores = JSON.parse(localStorage.getItem('stores') || '[]');
+      const datalist = document.getElementById('storeList');
+      datalist.innerHTML = '';
+      stores.forEach(store => {
+        const option = document.createElement('option');
+        option.value = store;
+        datalist.appendChild(option);
+      });
+    }
+
+    window.onload = loadStores;
 
     startOverlay.onclick = () => {
       startOverlay.style.display = 'none';
@@ -89,15 +114,34 @@
     }
 
     document.getElementById('submitBtn').onclick = async () => {
+      const taxType = document.querySelector('input[name="taxType"]:checked').value;
+      const taxRate = parseFloat(document.getElementById('taxRate').value);
+      let price = parseFloat(document.getElementById('price').value);
+
+      if (taxType === 'exclusive') {
+        price = price * (1 + taxRate);
+      }
+
       const data = {
         jan: document.getElementById('jan').value,
         store: document.getElementById('store').value,
-        price: document.getElementById('price').value
+        price: Math.round(price)
       };
 
       if (!data.jan || !data.price) { alert("入力不足"); return; }
       if (GAS_URL === 'YOUR_GAS_WEB_APP_URL') { alert("GASのURLを入れて"); return; }
-      
+
+      // 店舗名を保存
+      const store = document.getElementById('store').value;
+      if (store) {
+        const stores = JSON.parse(localStorage.getItem('stores') || '[]');
+        if (!stores.includes(store)) {
+          stores.push(store);
+          localStorage.setItem('stores', JSON.stringify(stores));
+          loadStores();
+        }
+      }
+
       statusElement.innerText = "送信中...";
       try {
         await fetch(GAS_URL, {
