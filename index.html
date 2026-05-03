@@ -79,14 +79,35 @@
     }
 
     // JAN入力時に商品名を検索
-    function autoFillProduct() {
+// JAN入力時に商品名を検索（ローカル → GAS経由でjancode.xyz）
+    async function autoFillProduct() {
       const jan = janInput.value;
+      if (jan.length < 8) return;
+
+      // 1. ローカルストレージを確認
       const products = JSON.parse(localStorage.getItem('products') || '{}');
       if (products[jan]) {
         productInput.value = products[jan];
         statusElement.innerText = "登録済みの商品です";
-      } else {
-        productInput.value = "";
+        return;
+      }
+
+      // 2. GASのdoGet経由でスクレイピング実行
+      statusElement.innerText = "商品名を検索中...";
+      try {
+        // GAS_URLにクエリパラメータを付けてGET送信
+        const res = await fetch(`${GAS_URL}?jan=${jan}`);
+        const data = await res.json();
+
+        if (data.name) {
+          productInput.value = data.name;
+          statusElement.innerText = "商品名を取得しました";
+        } else {
+          statusElement.innerText = "見つかりませんでした";
+        }
+      } catch (e) {
+        console.error("Lookup Error:", e);
+        statusElement.innerText = "検索エラー";
       }
     }
 
