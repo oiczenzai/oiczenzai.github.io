@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v2.4 価格DB登録</title>
+  <title>v2.5 価格DB登録</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
     .video-area { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: cover; }
-    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
+    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
     .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -30px; position: relative; }
     input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
     button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
@@ -24,7 +24,7 @@
   </div>
 
   <div class="card">
-    <div id="status">カメラ起動中...</div>
+    <div id="status">カメラを起動しています...</div>
     <input type="text" id="jan" placeholder="JANコード">
     <input type="text" id="store" placeholder="店舗名">
     <input type="number" id="price" placeholder="税込価格" inputmode="numeric">
@@ -37,58 +37,51 @@ const GAS_URL = 'YOUR_GAS_WEB_APP_URL';
 
 const videoElement = document.getElementById('video');
 const statusElement = document.getElementById('status');
-
-// バーコードリーダーの初期化
 const codeReader = new ZXing.BrowserBarcodeReader();
 
-// JANコードに解析を絞り込む設定
+// 解析設定
 const decodeHints = new Map();
 decodeHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
   ZXing.BarcodeFormat.EAN_13,
   ZXing.BarcodeFormat.EAN_8
 ]);
 
-async function initCamera() {
-  // 高解像度（フルHD）を優先的にリクエスト
-  const constraints = {
-    video: {
-      facingMode: "environment",
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    }
-  };
+// カメラ設定（エラー回避のため理想値を調整）
+const constraints = {
+  video: {
+    facingMode: "environment",
+    width: { ideal: 1280 },
+    height: { ideal: 720 }
+  }
+};
 
+async function initCamera() {
   try {
+    // 1. まずカメラストリームを取得
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    handleSuccess(stream);
-  } catch (err) {
-    console.warn("High-res failed, trying fallback...", err);
-    try {
-      const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      handleSuccess(fallbackStream);
-    } catch (e) {
-      statusElement.innerText = "カメラエラー: " + e.message;
-    }
+    videoElement.srcObject = stream;
+    videoElement.setAttribute('playsinline', true);
+    await videoElement.play();
+    
+    statusElement.innerText = "バーコードから15cmほど離してください";
+    
+    // 2. 映像素子からデコード開始
+    // decodeFromVideoElement を使用することで引数エラーを回避します
+    codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+      if (result) {
+        document.getElementById('jan').value = result.text;
+        statusElement.innerText = "認識成功: " + result.text;
+        if (navigator.vibrate) navigator.vibrate(100);
+      }
+      // ログを出さないことでループを軽く保つ
+    }, decodeHints);
+
+  } catch (e) {
+    console.error(e);
+    statusElement.innerText = "エラー: " + e.message;
   }
 }
 
-function handleSuccess(stream) {
-  videoElement.srcObject = stream;
-  statusElement.innerText = "15cmほど離してピントを合わせてください";
-  
-  // スキャン開始（ヒントを適用して精度向上）
-  codeReader.decodeFromConstraints(null, videoElement, (result, err) => {
-    if (result) {
-      document.getElementById('jan').value = result.text;
-      statusElement.innerText = "認識成功: " + result.text;
-      // 成功時に振動（スマホのみ）
-      if (navigator.vibrate) navigator.vibrate(100);
-    }
-    // errが発生してもログを出さず、ループを継続させる
-  }, decodeHints);
-}
-
-// ページ読み込み時にカメラ起動
 window.onload = initCamera;
 
 // 保存処理
@@ -115,8 +108,8 @@ document.getElementById('submitBtn').onclick = async () => {
         genre: "一般"
       })
     });
-    alert("保存リクエストを送信しました");
-    statusElement.innerText = "保存完了";
+    alert("保存完了");
+    statusElement.innerText = "スキャン待機中";
     document.getElementById('jan').value = "";
     document.getElementById('price').value = "";
   } catch (e) {
