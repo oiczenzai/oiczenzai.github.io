@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>価格DB登録 v2.2</title>
+  <title>v2.3 価格DB登録</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
     .video-area { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: cover; }
-    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 40%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
+    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 30%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
     .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -30px; position: relative; }
     input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
     button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
@@ -33,14 +33,15 @@
 
   <script>
 // --- 設定 ---
-const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // ここにGASのURLを貼り付け
+const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; 
 
-// グローバルスコープで定義（どこからでもアクセス可能にする）
 const videoElement = document.getElementById('video');
 const statusElement = document.getElementById('status');
+
+// バーコードリーダーの初期化
 const codeReader = new ZXing.BrowserBarcodeReader();
 
-// バーコード認識の設定（JANコードに特化）
+// JANコードに解析を絞り込む設定
 const decodeHints = new Map();
 decodeHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
   ZXing.BarcodeFormat.EAN_13,
@@ -48,12 +49,12 @@ decodeHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
 ]);
 
 async function initCamera() {
-  // 1. 高解像度を試行
+  // 高解像度（フルHD）を優先的にリクエスト
   const constraints = {
     video: {
       facingMode: "environment",
-      width: { min: 640, ideal: 1280 },
-      height: { min: 480, ideal: 720 }
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
     }
   };
 
@@ -61,8 +62,7 @@ async function initCamera() {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     handleSuccess(stream);
   } catch (err) {
-    console.warn("High-res camera failed, trying fallback...", err);
-    // 2. 失敗した場合は最小構成で試行
+    console.warn("High-res failed, trying fallback...", err);
     try {
       const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       handleSuccess(fallbackStream);
@@ -73,26 +73,19 @@ async function initCamera() {
 }
 
 function handleSuccess(stream) {
-  // ここで videoElement が正しく定義されているか確認
-  if (!videoElement) {
-    console.error("HTMLのvideo要素が見つかりません。id='video'を確認してください。");
-    return;
-  }
-  
   videoElement.srcObject = stream;
-  statusElement.innerText = "バーコードを枠に合わせてください";
+  statusElement.innerText = "15cmほど離してピントを合わせてください";
   
-  // スキャン開始
-    codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+  // スキャン開始（ヒントを適用して精度向上）
+  codeReader.decodeFromConstraints(null, videoElement, (result, err) => {
     if (result) {
-        document.getElementById('jan').value = result.text;
-        statusElement.innerText = "認識成功: " + result.text;
-        if (navigator.vibrate) navigator.vibrate(100);
-        // 認識したらスキャンを止める場合は以下を追加
-        // codeReader.reset(); 
+      document.getElementById('jan').value = result.text;
+      statusElement.innerText = "認識成功: " + result.text;
+      // 成功時に振動（スマホのみ）
+      if (navigator.vibrate) navigator.vibrate(100);
     }
-    // エラーログを出さないようにすることで、ループを高速化します
-    });
+    // errが発生してもログを出さず、ループを継続させる
+  }, decodeHints);
 }
 
 // ページ読み込み時にカメラ起動
