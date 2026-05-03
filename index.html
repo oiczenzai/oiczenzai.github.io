@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v2.5 価格DB登録</title>
+  <title>v2.6 価格DB登録</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -24,7 +24,7 @@
   </div>
 
   <div class="card">
-    <div id="status">カメラを起動しています...</div>
+    <div id="status">システム準備中...</div>
     <input type="text" id="jan" placeholder="JANコード">
     <input type="text" id="store" placeholder="店舗名">
     <input type="number" id="price" placeholder="税込価格" inputmode="numeric">
@@ -32,59 +32,49 @@
   </div>
 
   <script>
-// --- 設定 ---
 const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; 
-
 const videoElement = document.getElementById('video');
 const statusElement = document.getElementById('status');
+
+// 1. リーダーをJANコード（EAN）専用にカスタマイズ
 const codeReader = new ZXing.BrowserBarcodeReader();
-
-// 解析設定
-const decodeHints = new Map();
-decodeHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+const hints = new Map();
+hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
   ZXing.BarcodeFormat.EAN_13,
-  ZXing.BarcodeFormat.EAN_8
+  ZXing.BarcodeFormat.EAN_8,
+  ZXing.BarcodeFormat.CODE_128 // 予備
 ]);
-
-// カメラ設定（エラー回避のため理想値を調整）
-const constraints = {
-  video: {
-    facingMode: "environment",
-    width: { ideal: 1280 },
-    height: { ideal: 720 }
-  }
-};
 
 async function initCamera() {
   try {
-    // 1. まずカメラストリームを取得
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    
     videoElement.srcObject = stream;
-    videoElement.setAttribute('playsinline', true);
-    await videoElement.play();
-    
-    statusElement.innerText = "バーコードから15cmほど離してください";
-    
-    // 2. 映像素子からデコード開始
-    // decodeFromVideoElement を使用することで引数エラーを回避します
-    codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+    statusElement.innerText = "スキャン待機中...";
+
+    // 2. decodeFromStream を使用して直接ストリームを解析
+    // これによりビデオ要素の再生競合を避け、ライブラリに制御を任せます
+    codeReader.decodeFromStream(stream, videoElement, (result, err) => {
       if (result) {
-        document.getElementById('jan').value = result.text;
-        statusElement.innerText = "認識成功: " + result.text;
-        if (navigator.vibrate) navigator.vibrate(100);
+        // 同じコードの連続読み取りを防止する簡易チェック
+        if (document.getElementById('jan').value !== result.text) {
+          document.getElementById('jan').value = result.text;
+          statusElement.innerText = "認識成功: " + result.text;
+          if (navigator.vibrate) navigator.vibrate(100);
+        }
       }
-      // ログを出さないことでループを軽く保つ
-    }, decodeHints);
+      // エラー時は無視してループ継続
+    }, hints);
 
   } catch (e) {
-    console.error(e);
     statusElement.innerText = "エラー: " + e.message;
   }
 }
 
 window.onload = initCamera;
 
-// 保存処理
 document.getElementById('submitBtn').onclick = async () => {
   const janVal = document.getElementById('jan').value;
   const storeVal = document.getElementById('store').value;
