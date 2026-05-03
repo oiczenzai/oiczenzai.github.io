@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v4.1 価格DB登録</title>
+  <title>v4.2 最終疎通テスト</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
     .video-area { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: cover; }
-    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
+    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 75%; height: 30%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); pointer-events: none; }
     .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -30px; position: relative; }
-    button { width: 100%; padding: 16px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
     input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-    #status { text-align: center; font-size: 14px; margin-bottom: 10px; color: #555; height: 1.2em; font-weight: bold; }
-    #startOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 10; cursor: pointer; border-radius: 12px; }
+    button { width: 100%; padding: 16px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
+    #status { text-align: center; font-size: 14px; margin-bottom: 10px; color: #555; font-weight: bold; }
+    #startOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 10; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -26,15 +26,16 @@
   </div>
 
   <div class="card">
-    <div id="status">ボタンを押してください</div>
+    <div id="status">カメラを起動してください</div>
     <input type="text" id="jan" placeholder="JANコード">
     <input type="text" id="store" placeholder="店舗名" value="マイストア">
     <input type="number" id="price" placeholder="税込価格" inputmode="numeric">
-    <button id="submitBtn">スプレッドシートへ保存</button>
+    <button id="submitBtn">保存する</button>
   </div>
 
   <script>
-    const GAS_URL = 'YOUR_GAS_WEB_APP_URL'; // ここを必ず最新の /exec に
+    // --- 【超重要】ここをGASのURLに変更してください ---
+    const GAS_URL = 'https://script.google.com/macros/s/ここにID/exec'; 
 
     const videoElement = document.getElementById('video');
     const statusElement = document.getElementById('status');
@@ -44,50 +45,31 @@
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
 
-    let isScanning = false;
-
-    startOverlay.onclick = () => {
+    startOverlay.onclick = async () => {
       startOverlay.style.display = 'none';
-      initCamera();
-    };
-
-    async function initCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment", width: { ideal: 1280 } }
         });
         videoElement.srcObject = stream;
-        isScanning = true;
-        statusElement.innerText = "スキャン開始...";
+        statusElement.innerText = "スキャン中...";
 
-        // 読み取りループ
-        scanLoop();
-
-      } catch (e) {
-        statusElement.innerText = "カメラ起動エラー: " + e.message;
-      }
-    }
-
-    async function scanLoop() {
-      while (isScanning) {
-        try {
-          const result = await codeReader.decodeOnceFromVideoElement(videoElement);
+        // 読み取り開始（一回ごとに処理する方式に戻す）
+        codeReader.decodeFromVideoElement(videoElement, (result, err) => {
           if (result) {
             document.getElementById('jan').value = result.text;
             statusElement.innerText = "成功: " + result.text;
             if (navigator.vibrate) navigator.vibrate(100);
             stopCamera();
-            break;
           }
-        } catch (err) {
-          // 認識できない間はここに来る（正常）
-        }
-        await new Promise(r => setTimeout(r, 200)); // 0.2秒ごとに試行
+        }, hints);
+      } catch (e) {
+        statusElement.innerText = "エラー: " + e.message;
+        startOverlay.style.display = 'flex';
       }
-    }
+    };
 
     function stopCamera() {
-      isScanning = false;
       codeReader.reset();
       if (videoElement.srcObject) {
         videoElement.srcObject.getTracks().forEach(track => track.stop());
@@ -102,21 +84,25 @@
         price: document.getElementById('price').value
       };
 
-      statusElement.innerText = "送信中...";
+      if (!data.jan || !data.price) { alert("入力不足"); return; }
+      if (GAS_URL.includes("YOUR_GAS_WEB_APP_URL")) { alert("GASのURLが設定されていません"); return; }
 
+      statusElement.innerText = "送信中...";
       try {
+        // GAS_URLへ直接POSTを飛ばす
         await fetch(GAS_URL, {
           method: 'POST',
           mode: 'no-cors',
           body: JSON.stringify(data)
         });
-        alert("送信完了");
-        statusElement.innerText = "保存完了";
+        alert("送信しました");
+        statusElement.innerText = "完了";
         document.getElementById('jan').value = "";
         document.getElementById('price').value = "";
         startOverlay.style.display = 'flex';
+        startOverlay.innerText = "タップして次のスキャンへ";
       } catch (e) {
-        alert("エラー: " + e.message);
+        alert("送信失敗: " + e.message);
       }
     };
   </script>
