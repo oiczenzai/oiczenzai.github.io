@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v3.40 商品名自動補完版</title>
+  <title>v3.41 商品名自動補完版</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -79,43 +79,40 @@
     }
 
     // JAN入力時に商品名を検索
-// JAN入力時に商品名を検索（ローカル → GAS経由でjancode.xyz）
-async function autoFillProduct() {
-  const jan = janInput.value;
-  if (jan.length < 8) return;
+    async function autoFillProduct() {
+      const jan = janInput.value;
+      if (jan.length < 8) return;
 
-  // ローカルキャッシュ確認
-  const products = JSON.parse(localStorage.getItem('products') || '{}');
-  if (products[jan]) {
-    productInput.value = products[jan];
-    statusElement.innerText = "登録済み";
-    return;
-  }
+      // ローカルストレージに既にあればそれを使う
+      const products = JSON.parse(localStorage.getItem('products') || '{}');
+      if (products[jan]) {
+        productInput.value = products[jan];
+        statusElement.innerText = "登録済み";
+        return;
+      }
 
-  statusElement.innerText = "商品名を検索中...";
-  try {
-    // GASをプロキシとして使用
-    const res = await fetch(`${GAS_URL}?jan=${jan}`, {
-      method: 'GET',
-      redirect: 'follow' // GASのリダイレクトを追跡
-    });
+      statusElement.innerText = "商品名を検索中...";
+      try {
+        // GASのURLにJANをパラメータとして渡す
+        const res = await fetch(`${GAS_URL}?jan=${jan}`, {
+          method: 'GET',
+          redirect: 'follow'
+        });
 
-    if (!res.ok) throw new Error('Network response was not ok');
-    
-    const text = await res.text();
-    const data = JSON.parse(text);
+        const text = await res.text();
+        const data = JSON.parse(text);
 
-    if (data.name) {
-      productInput.value = data.name;
-      statusElement.innerText = "取得成功";
-    } else {
-      statusElement.innerText = "見つかりませんでした";
+        if (data.name) {
+          productInput.value = data.name;
+          statusElement.innerText = "取得成功";
+        } else {
+          statusElement.innerText = "商品名が見つかりませんでした";
+        }
+      } catch (e) {
+        console.error("Lookup Error:", e);
+        statusElement.innerText = "検索エラー";
+      }
     }
-  } catch (e) {
-    console.error("Lookup Error:", e);
-    statusElement.innerText = "検索エラー";
-  }
-}
 
     window.onload = () => {
       loadMasterData();
