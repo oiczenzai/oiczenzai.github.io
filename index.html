@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v3.1 読み取り巻き戻し版</title>
+  <title>v3.2 商品名自動補完版</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 15px; margin: 0; background: #f0f2f5; }
@@ -13,9 +13,12 @@
     .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -30px; position: relative; }
     button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
     #submitBtn { background: #28a745; }
-    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+    input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
     #status { text-align: center; font-size: 14px; margin-bottom: 10px; color: #555; height: 1.2em; font-weight: bold;}
     #startOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 10; cursor: pointer; border-radius: 12px; }
+    .tax-row { display: flex; align-items: center; gap: 15px; margin: 8px 0; font-size: 14px; }
+    .tax-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .tax-row input[type="radio"] { width: auto; margin: 0; }
   </style>
 </head>
 <body>
@@ -29,40 +32,42 @@
   <div class="card">
     <div id="status">ボタンを押してください</div>
     <input type="text" id="jan" placeholder="JANコード">
-    <input type="text" id="product" placeholder="商品名">
+    <input type="text" id="product" placeholder="商品名（自動補完されます）">
     <input type="text" id="store" placeholder="店舗名" list="storeList">
     <datalist id="storeList"></datalist>
     <input type="number" id="price" placeholder="価格" inputmode="numeric">
-    <div style="margin: 8px 0; display: flex; align-items: center;">
-      <label style="margin-right: 20px;"><input type="radio" name="taxType" value="inclusive" checked> 税込み</label>
+    
+    <div class="tax-row">
+      <label><input type="radio" name="taxType" value="inclusive" checked> 税込み</label>
       <label><input type="radio" name="taxType" value="exclusive"> 税別</label>
-    </div>
-    <div style="margin: 8px 0; display: flex; align-items: center;">
-      <label style="margin-right: 10px;">税率: </label>
-      <select id="taxRate">
+      <span style="margin-left: auto;">税率:</span>
+      <select id="taxRate" style="width: 80px; margin: 0;">
         <option value="0.08">8%</option>
         <option value="0.10" selected>10%</option>
       </select>
     </div>
+
     <button id="submitBtn">スプレッドシートへ保存</button>
   </div>
 
   <script>
-    // --- GASのURLをここに貼る ---
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbxIQGA2kz0chypzLaqHjA1ijl3HEM0y9TEbo2T1UWe1T9crrawMovbb5l1AUk8U-cYG1A/exec';
 
     const videoElement = document.getElementById('video');
     const statusElement = document.getElementById('status');
     const startOverlay = document.getElementById('startOverlay');
+    const janInput = document.getElementById('jan');
+    const productInput = document.getElementById('product');
     
-    // v2.7で読み取れていたライブラリとメソッドに巻き戻し
     const codeReader = new ZXing.BrowserBarcodeReader();
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
 
     let currentStream = null;
 
-    function loadStores() {
+    // 店舗リストと商品マスタのロード
+    function loadMasterData() {
+      // 店舗リスト
       const stores = JSON.parse(localStorage.getItem('stores') || '[]');
       const datalist = document.getElementById('storeList');
       datalist.innerHTML = '';
@@ -73,17 +78,22 @@
       });
     }
 
+    // JAN入力時に商品名を検索
+    function autoFillProduct() {
+      const jan = janInput.value;
+      const products = JSON.parse(localStorage.getItem('products') || '{}');
+      if (products[jan]) {
+        productInput.value = products[jan];
+        statusElement.innerText = "登録済みの商品です";
+      } else {
+        productInput.value = "";
+      }
+    }
+
     window.onload = () => {
-      loadStores();
-      document.getElementById('jan').addEventListener('input', () => {
-        const jan = document.getElementById('jan').value;
-        const products = JSON.parse(localStorage.getItem('products') || '{}');
-        if (products[jan]) {
-          document.getElementById('product').value = products[jan];
-        } else {
-          document.getElementById('product').value = '';
-        }
-      });
+      loadMasterData();
+      janInput.addEventListener('input', autoFillProduct);
+      janInput.addEventListener('change', autoFillProduct);
     };
 
     startOverlay.onclick = () => {
@@ -98,14 +108,12 @@
         });
         currentStream = stream;
 
-        // v2.7と同じ decodeFromStream を使用
         codeReader.decodeFromStream(stream, videoElement, (result, err) => {
           if (result) {
-            document.getElementById('jan').value = result.text;
+            janInput.value = result.text;
+            autoFillProduct(); // スキャン成功時にも補完実行
             statusElement.innerText = "認識成功: " + result.text;
             if (navigator.vibrate) navigator.vibrate(100);
-            
-            // 読み取り成功時にカメラ停止
             stopCamera();
           }
         }, hints);
@@ -134,33 +142,28 @@
         price = price * (1 + taxRate);
       }
 
+      // GASのsaveRecord関数に合わせてキー名を「name」にする
       const data = {
-        jan: document.getElementById('jan').value,
+        jan: janInput.value,
         store: document.getElementById('store').value,
         price: Math.round(price),
-        product: document.getElementById('product').value
+        name: productInput.value // GAS側の data.name に対応
       };
 
-      if (!data.jan || !data.price) { alert("入力不足"); return; }
-      if (GAS_URL === 'YOUR_GAS_WEB_APP_URL') { alert("GASのURLを入れて"); return; }
+      if (!data.jan || isNaN(price)) { alert("JANと価格は必須です"); return; }
 
-      // 店舗名を保存
-      const store = document.getElementById('store').value;
-      if (store) {
-        const stores = JSON.parse(localStorage.getItem('stores') || '[]');
-        if (!stores.includes(store)) {
-          stores.push(store);
-          localStorage.setItem('stores', JSON.stringify(stores));
-          loadStores();
-        }
-      }
-
-      // 商品名を保存
-      const product = document.getElementById('product').value;
-      if (product && data.jan) {
+      // ローカル保存（商品名と店舗）
+      if (data.name) {
         const products = JSON.parse(localStorage.getItem('products') || '{}');
-        products[data.jan] = product;
+        products[data.jan] = data.name;
         localStorage.setItem('products', JSON.stringify(products));
+      }
+      if (data.store) {
+        const stores = JSON.parse(localStorage.getItem('stores') || '[]');
+        if (!stores.includes(data.store)) {
+          stores.push(data.store);
+          localStorage.setItem('stores', JSON.stringify(stores));
+        }
       }
 
       statusElement.innerText = "送信中...";
@@ -170,14 +173,19 @@
           mode: 'no-cors',
           body: JSON.stringify(data)
         });
-        alert("送信完了");
+        alert("保存完了");
         statusElement.innerText = "完了";
-        document.getElementById('jan').value = "";
+        
+        // 入力クリア（店舗名は残す）
+        janInput.value = "";
+        productInput.value = "";
         document.getElementById('price').value = "";
+        
+        loadMasterData();
         startOverlay.style.display = 'flex';
-        startOverlay.innerText = "タップしてカメラを再起動";
+        startOverlay.innerText = "タップして次のスキャン";
       } catch (e) {
-        alert("送信失敗: " + e.message);
+        alert("失敗: " + e.message);
       }
     };
   </script>
