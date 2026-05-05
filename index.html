@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>価格ロガー Pro</title>
+  <title>価格ロガー</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 0; margin: 0; background: #f0f2f5; }
@@ -74,7 +74,7 @@
 <datalist id="storeList"></datalist>
 
 <script>
-  const GAS_URL = 'あなたのGAS_URL';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwxFrcPSHVo7E_LGVeuXNoXHmR9un8Ze27kOmQ0ATHqhrkQopfyJ8XxsGJWoAiLLLviCw/exec';
   const codeReader = new ZXing.BrowserBarcodeReader();
   let currentStream = null;
   let activeView = 'record';
