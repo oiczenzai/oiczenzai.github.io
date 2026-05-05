@@ -3,33 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>価格ロガー</title>
+  <title>価格ロガー2</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 0; margin: 0; background: #f0f2f5; }
     .page { display: none; padding: 15px; }
     .active { display: block; }
     
-    /* Navigation */
     nav { background: #007bff; padding: 10px; display: flex; gap: 10px; position: sticky; top: 0; z-index: 100; }
-    nav button { background: rgba(255,255,255,0.2); border: none; padding: 10px; color: white; border-radius: 5px; flex: 1; font-weight: bold; margin-top: 0; }
+    nav button { background: rgba(255,255,255,0.2); border: none; padding: 10px; color: white; border-radius: 5px; flex: 1; font-weight: bold; }
     nav button.current { background: white; color: #007bff; }
 
-    /* Common UI */
     .video-area { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
     video { width: 100%; height: 100%; object-fit: cover; }
     .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 25%; border: 2px solid #00ff00; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: none; }
-    .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); position: relative; }
-    button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; cursor: pointer; }
+    .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    button { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
     input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-    #status { text-align: center; font-size: 14px; margin: 10px 0; font-weight: bold; color: #555; }
     .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 10; border-radius: 12px; }
 
-    /* Search Results */
     .result-item { background: white; padding: 12px; border-radius: 8px; margin-top: 10px; border-left: 5px solid #007bff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .result-header { display: flex; justify-content: space-between; font-size: 12px; color: #777; margin-bottom: 5px; }
     .result-price { font-size: 18px; font-weight: bold; color: #d63031; }
-    .result-store { font-size: 14px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -39,7 +34,6 @@
   <button onclick="switchView('search')" id="nav-search">検索</button>
 </nav>
 
-<!-- 記録ページ -->
 <div id="page-record" class="page active">
   <div class="video-area">
     <div id="overlay-record" class="overlay" onclick="startScan('record')">タップしてスキャン</div>
@@ -47,16 +41,15 @@
     <div class="guide-box"></div>
   </div>
   <div class="card">
-    <div id="status-record">JANをスキャンしてください</div>
+    <div id="status-record" style="text-align:center; font-size:14px; margin-bottom:10px;">JANをスキャンしてください</div>
     <input type="text" id="jan-record" placeholder="JANコード">
     <input type="text" id="product-record" placeholder="商品名（自動補完）">
     <input type="text" id="store-record" placeholder="店舗名" list="storeList">
     <input type="number" id="price-record" placeholder="価格" inputmode="numeric">
-    <button id="submitBtn" onclick="handleSave()">スプレッドシートへ保存</button>
+    <button id="submitBtn" onclick="handleSave()">保存</button>
   </div>
 </div>
 
-<!-- 検索ページ -->
 <div id="page-search" class="page">
   <div class="video-area">
     <div id="overlay-search" class="overlay" onclick="startScan('search')">タップしてスキャン</div>
@@ -64,9 +57,9 @@
     <div class="guide-box"></div>
   </div>
   <div class="card">
-    <input type="text" id="query-search" placeholder="JANまたは商品名を入力">
-    <button onclick="handleSearch()">履歴を検索</button>
-    <div id="status-search"></div>
+    <input type="text" id="query-search" placeholder="JANまたは商品名">
+    <button onclick="handleSearch()">検索</button>
+    <div id="status-search" style="text-align:center; font-size:14px; margin-top:10px;"></div>
   </div>
   <div id="search-results"></div>
 </div>
@@ -77,24 +70,32 @@
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbwxFrcPSHVo7E_LGVeuXNoXHmR9un8Ze27kOmQ0ATHqhrkQopfyJ8XxsGJWoAiLLLviCw/exec';
   const codeReader = new ZXing.BrowserBarcodeReader();
   let currentStream = null;
-  let activeView = 'record';
 
-  // ページ切り替え
+  async function updateStoreList() {
+    try {
+      const res = await fetch(`${GAS_URL}?action=getStores`);
+      const stores = await res.json();
+      const dl = document.getElementById('storeList');
+      dl.innerHTML = '';
+      stores.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        dl.appendChild(opt);
+      });
+    } catch (e) { console.error(e); }
+  }
+
   function switchView(view) {
     stopCamera();
-    activeView = view;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`page-${view}`).classList.add('active');
     document.querySelectorAll('nav button').forEach(b => b.classList.remove('current'));
     document.getElementById(`nav-${view}`).classList.add('current');
   }
 
-  // カメラ開始
   async function startScan(view) {
     document.getElementById(`overlay-${view}`).style.display = 'none';
     const videoEl = document.getElementById(`video-${view}`);
-    const statusEl = document.getElementById(`status-${view}`);
-    
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       currentStream = stream;
@@ -109,12 +110,9 @@
             handleSearch();
           }
           stopCamera();
-          document.getElementById(`overlay-${view}`).style.display = 'flex';
         }
       });
-    } catch (e) {
-      alert("カメラエラー: " + e.message);
-    }
+    } catch (e) { alert(e); }
   }
 
   function stopCamera() {
@@ -126,99 +124,72 @@
     document.querySelectorAll('.overlay').forEach(o => o.style.display = 'flex');
   }
 
-  // 商品名補完 (Record用)
   async function autoFillProduct(jan) {
     const status = document.getElementById('status-record');
-    const productInput = document.getElementById('product-record');
-    
+    const nameInput = document.getElementById('product-record');
     const localData = JSON.parse(localStorage.getItem('products') || '{}');
     if (localData[jan]) {
-      productInput.value = localData[jan];
+      nameInput.value = localData[jan];
       status.innerText = "登録済みデータ";
       return;
     }
-
     status.innerText = "検索中...";
     try {
       const res = await fetch(`${GAS_URL}?action=lookup&jan=${jan}`);
       const data = await res.json();
       if (data.name) {
-        productInput.value = data.name;
+        nameInput.value = data.name;
         status.innerText = "取得成功";
       }
     } catch (e) { status.innerText = "補完失敗"; }
   }
 
-  // 履歴検索 (Search用)
   async function handleSearch() {
     const q = document.getElementById('query-search').value;
-    const resultDiv = document.getElementById('search-results');
+    const resDiv = document.getElementById('search-results');
     const status = document.getElementById('status-search');
-    
     if (!q) return;
     status.innerText = "検索中...";
-    resultDiv.innerHTML = "";
-
+    resDiv.innerHTML = "";
     try {
       const res = await fetch(`${GAS_URL}?action=search&q=${encodeURIComponent(q)}`);
       const data = await res.json();
-      
-      if (data.length === 0) {
-        status.innerText = "履歴が見つかりませんでした";
-        return;
-      }
-
-      status.innerText = `${data.length} 件の履歴`;
+      status.innerText = data.length ? `${data.length}件ヒット` : "なし";
       data.forEach(item => {
-        resultDiv.innerHTML += `
+        resDiv.innerHTML += `
           <div class="result-item">
-            <div class="result-header"><span>${item.date}</span><span>JAN: ${item.jan}</span></div>
-            <div style="font-size:12px; color:#555;">${item.name}</div>
-            <div class="result-store">${item.store}</div>
-            <div class="result-price">¥${item.price.toLocaleString()} (税込)</div>
-          </div>
-        `;
+            <div class="result-header"><span>${item.date}</span><span>JAN:${item.jan}</span></div>
+            <div style="font-size:12px;">${item.name}</div>
+            <div style="font-weight:bold;">${item.store}</div>
+            <div class="result-price">¥${item.price.toLocaleString()}</div>
+          </div>`;
       });
-    } catch (e) {
-      status.innerText = "検索エラー";
-    }
+    } catch (e) { status.innerText = "エラー"; }
   }
 
-  // 保存処理 (Record用)
   async function handleSave() {
     const btn = document.getElementById('submitBtn');
-    const jan = document.getElementById('jan-record').value;
-    const price = document.getElementById('price-record').value;
-    const name = document.getElementById('product-record').value;
-    const store = document.getElementById('store-record').value;
-
-    if (!jan || !price) { alert("JANと価格は必須"); return; }
-
+    const payload = {
+      jan: document.getElementById('jan-record').value,
+      name: document.getElementById('product-record').value,
+      store: document.getElementById('store-record').value,
+      price: parseInt(document.getElementById('price-record').value)
+    };
+    if (!payload.jan || !payload.price) return alert("必須項目漏れ");
     btn.disabled = true;
-    btn.innerText = "送信中...";
-
-    const payload = { jan, name, store, price: parseInt(price) };
-
     try {
       await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-      
-      // ローカル保存
       const products = JSON.parse(localStorage.getItem('products') || '{}');
-      products[jan] = name;
+      products[payload.jan] = payload.name;
       localStorage.setItem('products', JSON.stringify(products));
-      
-      alert("保存しました");
-      document.getElementById('jan-record').value = "";
-      document.getElementById('price-record').value = "";
-      document.getElementById('product-record').value = "";
+      alert("保存完了");
+      ['jan-record', 'product-record', 'price-record'].forEach(id => document.getElementById(id).value = "");
+      updateStoreList();
     } catch (e) { alert("エラー"); }
-    finally {
-      btn.disabled = false;
-      btn.innerText = "スプレッドシートへ保存";
-    }
+    finally { btn.disabled = false; }
   }
 
-  window.onload = () => switchView('record');
+  window.onload = () => { switchView('record'); updateStoreList(); };
 </script>
 </body>
 </html>
